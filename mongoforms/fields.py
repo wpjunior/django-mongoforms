@@ -3,16 +3,43 @@ from django.utils.encoding import smart_unicode
 from pymongo.errors import InvalidId
 from pymongo.objectid import ObjectId
 
+BLANK_CHOICE_DASH = [("", "---------")]
+BLANK_CHOICE_NONE = [("", "None")]
+
+class MongoChoiceIterator(object):
+    def __init__(self, field):
+        self.field = field
+        self.queryset = field.queryset
+
+    def __iter__(self):
+        if self.field.empty_label is not None:
+            yield (u"", self.field.empty_label)
+        
+        for obj in self.queryset.all():
+            yield self.choice(obj)
+
+    def __len__(self):
+        return len(self.queryset)
+
+    def choice(self, obj):
+        return (self.field.prepare_value(obj), self.field.label_from_instance(obj))
+
 class ReferenceField(forms.ChoiceField):
     """
     Reference field for mongo forms. Inspired by `django.forms.models.ModelChoiceField`.
     """
-    def __init__(self, queryset, *aargs, **kwaargs):
+    def __init__(self, queryset, empty_label=u"---------",
+                 *aargs, **kwaargs):
+        
         forms.Field.__init__(self, *aargs, **kwaargs)
         self.queryset = queryset
-
+        self.empty_label = empty_label
+        
     def _get_queryset(self):
         return self._queryset
+        
+    def prepare_value(self, value):
+        return value.pk
 
     def _set_queryset(self, queryset):
         self._queryset = queryset
@@ -21,13 +48,17 @@ class ReferenceField(forms.ChoiceField):
     queryset = property(_get_queryset, _set_queryset)
 
     def _get_choices(self):
-        if hasattr(self, '_choices'):
-            return self._choices
-
-        self._choices = [(obj.id, smart_unicode(obj)) for obj in self.queryset]
-        return self._choices
+        return MongoChoiceIterator(self)
 
     choices = property(_get_choices, forms.ChoiceField._set_choices)
+    
+    def label_from_instance(self, obj):
+        """
+        This method is used to convert objects into strings; it's used to
+        generate the labels for the choices presented by this object. Subclasses
+        can override this method to customize the display of the choices.
+        """
+        return smart_unicode(obj)
 
     def clean(self, value):
         try:
@@ -52,6 +83,11 @@ class MongoFormFieldGenerator(object):
         else:
             raise NotImplementedError('%s is not supported by MongoForm' % \
                 field.__class__.__name__)
+                
+    def get_field_choices(self, field, include_blank=True,
+                          blank_choice=BLANK_CHOICE_DASH):
+        first_choice = include_blank and blank_choice or []
+        return first_choice + list(field.choices)
 
     def generate_stringfield(self, field_name, field):
 
@@ -71,7 +107,7 @@ class MongoFormFieldGenerator(object):
                 required=field.required,
                 initial=field.default,
                 label=label,
-                choices=field.choices
+                choices=self.get_field_choices(field)
             )
         elif field.max_length is None:
             return forms.CharField(
