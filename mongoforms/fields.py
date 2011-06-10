@@ -54,25 +54,31 @@ class MongoFormFieldGenerator(object):
                 field.__class__.__name__)
 
     def generate_stringfield(self, field_name, field):
+
+        label = field.verbose_name or field_name
+
         if field.regex:
             return forms.CharField(
                 regex=field.regex,
                 required=field.required,
                 min_length=field.min_length,
                 max_length=field.max_length,
+                label=label,
                 initial=field.default
             )
         elif field.choices:
             return forms.ChoiceField(
                 required=field.required,
                 initial=field.default,
-                choices=zip(field.choices, field.choices)
+                label=label,
+                choices=field.choices
             )
         elif field.max_length is None:
             return forms.CharField(
                 required=field.required,
                 initial=field.default,
                 min_length=field.min_length,
+                label=label,
                 widget=forms.Textarea
             )
         else:
@@ -80,6 +86,7 @@ class MongoFormFieldGenerator(object):
                 required=field.required,
                 min_length=field.min_length,
                 max_length=field.max_length,
+                label=label,
                 initial=field.default
             )
 
@@ -100,11 +107,13 @@ class MongoFormFieldGenerator(object):
         )
 
     def generate_intfield(self, field_name, field):
+
         return forms.IntegerField(
             required=field.required,
             min_value=field.min_value,
             max_value=field.max_value,
-            initial=field.default
+            initial=field.default,
+            label = field.verbose_name or field_name
         )
 
     def generate_floatfield(self, field_name, field):
@@ -126,7 +135,8 @@ class MongoFormFieldGenerator(object):
     def generate_booleanfield(self, field_name, field):
         return forms.BooleanField(
             required=field.required,
-            initial=field.default
+            initial=field.default,
+            label = field.verbose_name or field_name
         )
 
     def generate_datetimefield(self, field_name, field):
