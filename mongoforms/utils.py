@@ -24,7 +24,8 @@ def iter_valid_fields(meta):
     meta_fields = getattr(meta, 'fields', ())
     meta_exclude = getattr(meta, 'exclude', ()) + (meta.document._meta.get('id_field'),)
     # walk through the document fields
-    for field_name, field in meta.document._fields.iteritems():
+
+    for field_name, field in sorted(meta.document._fields.items(), key=lambda t: t[1].creation_counter):
         # skip excluded or not explicit included fields
         if (meta_fields and field_name not in meta_fields) or field_name in meta_exclude:
             continue
