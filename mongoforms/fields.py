@@ -183,3 +183,8 @@ class MongoFormFieldGenerator(object):
 
     def generate_referencefield(self, field_name, field):
         return ReferenceField(field.document_type.objects)
+
+    def generate_listfield(self, field_name, field):
+        if field.field.choices:
+            return forms.MultipleChoiceField(choices=field.field.choices,
+                                             required=False, widget=forms.CheckboxSelectMultiple)
