@@ -38,6 +38,7 @@ class MongoFormMetaClass(type):
                 # add field and override clean method to respect mongoengine-validator
                 doc_fields[field_name] = formfield_generator.generate(field_name, field)
                 doc_fields[field_name].clean = mongoengine_validate_wrapper(
+                    field,
                     doc_fields[field_name].clean, field._validate)
 
             # write the new document fields to base_fields
@@ -53,7 +54,7 @@ class MongoForm(forms.BaseForm):
     """Base MongoForm class. Used to create new MongoForms"""
     __metaclass__ = MongoFormMetaClass
 
-    def __init__(self, data=None, auto_id='id_%s', prefix=None, initial=None,
+    def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None, initial=None,
                  error_class=forms.util.ErrorList, label_suffix=':',
                  empty_permitted=False, instance=None):
         """ initialize the form"""

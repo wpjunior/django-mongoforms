@@ -2,9 +2,10 @@ from django import forms
 from django.utils.encoding import smart_unicode
 from pymongo.errors import InvalidId
 from pymongo.objectid import ObjectId
+from django.core.validators import EMPTY_VALUES
+from django.utils.encoding import smart_unicode
 
 BLANK_CHOICE_DASH = [("", "---------")]
-BLANK_CHOICE_NONE = [("", "None")]
 
 class MongoChoiceIterator(object):
     def __init__(self, field):
@@ -24,6 +25,13 @@ class MongoChoiceIterator(object):
     def choice(self, obj):
         return (self.field.prepare_value(obj), self.field.label_from_instance(obj))
 
+
+class MongoCharField(forms.CharField):
+    def to_python(self, value):
+        if value in EMPTY_VALUES:
+            return None
+        return smart_unicode(value)
+
 class ReferenceField(forms.ChoiceField):
     """
     Reference field for mongo forms. Inspired by `django.forms.models.ModelChoiceField`.
@@ -39,7 +47,10 @@ class ReferenceField(forms.ChoiceField):
         return self._queryset
         
     def prepare_value(self, value):
-        return value.pk
+        if hasattr(value, '_meta'):
+            return value.pk
+
+        return super(ReferenceField, self).prepare_value(value)
 
     def _set_queryset(self, queryset):
         self._queryset = queryset
@@ -64,7 +75,9 @@ class ReferenceField(forms.ChoiceField):
         try:
             oid = ObjectId(value)
             oid = super(ReferenceField, self).clean(oid)
-            obj = self.queryset.get(id=oid)
+
+            queryset = self.queryset.clone()
+            obj = queryset.get(id=oid)
         except (TypeError, InvalidId, self.queryset._document.DoesNotExist):
             raise forms.ValidationError(self.error_messages['invalid_choice'] % {'value':value})
         return obj
@@ -82,49 +95,38 @@ class MongoFormFieldGenerator(object):
                 field.__class__.__name__.lower())(field_name, field)
         else:
             raise NotImplementedError('%s is not supported by MongoForm' % \
-                field.__class__.__name__)
+                                          field.__class__.__name__)
                 
     def get_field_choices(self, field, include_blank=True,
                           blank_choice=BLANK_CHOICE_DASH):
         first_choice = include_blank and blank_choice or []
         return first_choice + list(field.choices)
 
-    def generate_stringfield(self, field_name, field):
+    def string_field(self, value):
+        if value in EMPTY_VALUES:
+            return None
+        return smart_unicode(value)
 
-        label = field.verbose_name or field_name
+    def generate_stringfield(self, field_name, field):
+        form_class = MongoCharField
+        defaults = {'label': field.verbose_name or field_name,
+                    'initial': field.default,
+                    'required': field.required}
 
         if field.regex:
-            return forms.CharField(
-                regex=field.regex,
-                required=field.required,
-                min_length=field.min_length,
-                max_length=field.max_length,
-                label=label,
-                initial=field.default
-            )
+            defaults['regex'] = field.regex
         elif field.choices:
-            return forms.ChoiceField(
-                required=field.required,
-                initial=field.default,
-                label=label,
-                choices=self.get_field_choices(field)
-            )
-        elif field.max_length is None:
-            return forms.CharField(
-                required=field.required,
-                initial=field.default,
-                min_length=field.min_length,
-                label=label,
-                widget=forms.Textarea
-            )
-        else:
-            return forms.CharField(
-                required=field.required,
-                min_length=field.min_length,
-                max_length=field.max_length,
-                label=label,
-                initial=field.default
-            )
+            form_class = forms.TypedChoiceField
+            defaults['choices'] = self.get_field_choices(field)
+            defaults['coerce'] = self.string_field
+
+            if not field.required:
+                defaults['empty_value'] = None
+
+            if field_name == 'agua_ca':
+                a = form_class(**defaults)
+
+        return form_class(**defaults)
 
     def generate_emailfield(self, field_name, field):
         return forms.EmailField(
@@ -143,30 +145,45 @@ class MongoFormFieldGenerator(object):
         )
 
     def generate_intfield(self, field_name, field):
-
-        return forms.IntegerField(
-            required=field.required,
-            min_value=field.min_value,
-            max_value=field.max_value,
-            initial=field.default,
-            label = field.verbose_name or field_name
-        )
+        if field.choices:
+            return forms.TypedChoiceField(
+                coerce=int,
+                empty_value=0,
+                required=field.required,
+                initial=field.default,
+                label = field.verbose_name or field_name,
+                choices=field.choices
+            )
+        else:
+            return forms.IntegerField(
+                required=field.required,
+                min_value=field.min_value,
+                max_value=field.max_value,
+                initial=field.default,
+                label = field.verbose_name or field_name
+                )
 
     def generate_floatfield(self, field_name, field):
-        return forms.FloatField(
-            required=field.required,
-            min_value=field.min_value,
-            max_value=field.max_value,
-            initial=field.default
-        )
+
+        form_class = forms.FloatField
+
+        defaults = {'label': field.verbose_name or field_name,
+                    'initial': field.default,
+                    'required': field.required,
+                    'min_value': field.min_value,
+                    'max_value': field.max_value,}
+
+        return form_class(**defaults)
 
     def generate_decimalfield(self, field_name, field):
-        return forms.DecimalField(
-            required=field.required,
-            min_value=field.min_value,
-            max_value=field.max_value,
-            initial=field.default
-        )
+        form_class = forms.DecimalField
+        defaults = {'label': field.verbose_name or field_name,
+                    'initial': field.default,
+                    'required': field.required,
+                    'min_value': field.min_value,
+                    'max_value': field.max_value,}
+
+        return form_class(**defaults)
 
     def generate_booleanfield(self, field_name, field):
         return forms.BooleanField(
