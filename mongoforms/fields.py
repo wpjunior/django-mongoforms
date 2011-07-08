@@ -72,6 +72,9 @@ class ReferenceField(forms.ChoiceField):
         return smart_unicode(obj)
 
     def clean(self, value):
+        if value in EMPTY_VALUES and not self.required:
+            return None
+
         try:
             oid = ObjectId(value)
             oid = super(ReferenceField, self).clean(oid)
@@ -107,11 +110,19 @@ class MongoFormFieldGenerator(object):
             return None
         return smart_unicode(value)
 
+    def integer_field(self, value):
+        if value in EMPTY_VALUES:
+            return None
+        return int(value)
+
     def generate_stringfield(self, field_name, field):
         form_class = MongoCharField
         defaults = {'label': field.verbose_name or field_name,
                     'initial': field.default,
                     'required': field.required}
+
+        if field.max_length and not field.choices:
+            defaults['max_length'] = field.max_length
 
         if field.regex:
             defaults['regex'] = field.regex
@@ -122,9 +133,6 @@ class MongoFormFieldGenerator(object):
 
             if not field.required:
                 defaults['empty_value'] = None
-
-            if field_name == 'agua_ca':
-                a = form_class(**defaults)
 
         return form_class(**defaults)
 
@@ -147,8 +155,8 @@ class MongoFormFieldGenerator(object):
     def generate_intfield(self, field_name, field):
         if field.choices:
             return forms.TypedChoiceField(
-                coerce=int,
-                empty_value=0,
+                coerce=self.integer_field,
+                empty_value=None,
                 required=field.required,
                 initial=field.default,
                 label = field.verbose_name or field_name,
@@ -199,9 +207,12 @@ class MongoFormFieldGenerator(object):
         )
 
     def generate_referencefield(self, field_name, field):
-        return ReferenceField(field.document_type.objects)
+        return ReferenceField(field.document_type.objects,
+                              label = field.verbose_name or field_name,
+                              required=field.required)
 
     def generate_listfield(self, field_name, field):
         if field.field.choices:
             return forms.MultipleChoiceField(choices=field.field.choices,
-                                             required=False, widget=forms.CheckboxSelectMultiple)
+                                             required=field.required,
+                                             widget=forms.CheckboxSelectMultiple)
