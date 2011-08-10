@@ -115,11 +115,22 @@ class MongoFormFieldGenerator(object):
             return None
         return int(value)
 
+    def get_field_label(self, field_name, field):
+        if field.verbose_name:
+            return field.verbose_name.capitalize()
+        return field_name.capitalize()
+
+    def get_field_help_text(self, field):
+        if field.help_text:
+            return field.help_text.capitalize()
+
     def generate_stringfield(self, field_name, field):
         form_class = MongoCharField
-        defaults = {'label': field.verbose_name or field_name,
+
+        defaults = {'label': self.get_field_label(field_name, field),
                     'initial': field.default,
-                    'required': field.required}
+                    'required': field.required,
+                    'help_text': self.get_field_help_text(field)}
 
         if field.max_length and not field.choices:
             defaults['max_length'] = field.max_length
@@ -141,7 +152,9 @@ class MongoFormFieldGenerator(object):
             required=field.required,
             min_length=field.min_length,
             max_length=field.max_length,
-            initial=field.default
+            initial=field.default,
+            label=self.get_field_label(field_name, field),
+            help_text= self.get_field_help_text(field)
         )
 
     def generate_urlfield(self, field_name, field):
@@ -149,7 +162,9 @@ class MongoFormFieldGenerator(object):
             required=field.required,
             min_length=field.min_length,
             max_length=field.max_length,
-            initial=field.default
+            initial=field.default,
+            label=self.get_field_label(field_name, field),
+            help_text= self.get_field_help_text(field)
         )
 
     def generate_intfield(self, field_name, field):
@@ -159,8 +174,9 @@ class MongoFormFieldGenerator(object):
                 empty_value=None,
                 required=field.required,
                 initial=field.default,
-                label = field.verbose_name or field_name,
-                choices=field.choices
+                label = self.get_field_label(field_name, field),
+                choices=field.choices,
+                help_text= self.get_field_help_text(field)
             )
         else:
             return forms.IntegerField(
@@ -168,28 +184,31 @@ class MongoFormFieldGenerator(object):
                 min_value=field.min_value,
                 max_value=field.max_value,
                 initial=field.default,
-                label = field.verbose_name or field_name
+                label = self.get_field_label(field_name, field),
+                help_text= self.get_field_help_text(field)
                 )
 
     def generate_floatfield(self, field_name, field):
 
         form_class = forms.FloatField
 
-        defaults = {'label': field.verbose_name or field_name,
+        defaults = {'label': self.get_field_label(field_name, field),
                     'initial': field.default,
                     'required': field.required,
                     'min_value': field.min_value,
-                    'max_value': field.max_value,}
+                    'max_value': field.max_value,
+                    'help_text': self.get_field_help_text(field)}
 
         return form_class(**defaults)
 
     def generate_decimalfield(self, field_name, field):
         form_class = forms.DecimalField
-        defaults = {'label': field.verbose_name or field_name,
+        defaults = {'label': self.get_field_label(field_name, field),
                     'initial': field.default,
                     'required': field.required,
                     'min_value': field.min_value,
-                    'max_value': field.max_value,}
+                    'max_value': field.max_value,
+                    'help_text': self.get_field_help_text(field)}
 
         return form_class(**defaults)
 
@@ -197,22 +216,27 @@ class MongoFormFieldGenerator(object):
         return forms.BooleanField(
             required=field.required,
             initial=field.default,
-            label = field.verbose_name or field_name
+            label = self.get_field_label(field_name, field),
+            help_text = self.get_field_help_text(field)
         )
 
     def generate_datetimefield(self, field_name, field):
         return forms.DateTimeField(
             required=field.required,
-            initial=field.default
+            initial=field.default,
+            label = self.get_field_label(field_name, field),
         )
 
     def generate_referencefield(self, field_name, field):
         return ReferenceField(field.document_type.objects,
-                              label = field.verbose_name or field_name,
+                              label = self.get_field_label(field_name, field),
+                              help_text = self.get_field_help_text(field),
                               required=field.required)
 
     def generate_listfield(self, field_name, field):
         if field.field.choices:
             return forms.MultipleChoiceField(choices=field.field.choices,
                                              required=field.required,
+                                             label = self.get_field_label(field_name, field),
+                                             help_text = self.get_field_help_text(field),
                                              widget=forms.CheckboxSelectMultiple)
